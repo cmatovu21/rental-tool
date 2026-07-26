@@ -19,7 +19,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = requireRole(await getCurrentUser(), STAFF_WHO_RECORD_PAYMENTS);
+    const session = requireRole(await getCurrentUser(), [...STAFF_WHO_RECORD_PAYMENTS]);
     const body = await request.json().catch(() => null);
     const parsed = recordPaymentSchema.safeParse(body);
     if (!parsed.success) {
