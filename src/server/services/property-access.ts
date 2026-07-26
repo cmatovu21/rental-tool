@@ -1,0 +1,1 @@
+export const STAFF_WHO_MANAGE_PROPERTIES = ['LANDLORD', 'CARETAKER'] as const;

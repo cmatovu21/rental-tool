@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+
+# next.js build output
+.next/
+out/
+
+# env files
+.env
+.env*.local
+
+# uploaded media (local-disk storage provider — see src/lib/storage.ts)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# misc
+.DS_Store
+*.log

@@ -1,0 +1,530 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum UserRole {
+  LANDLORD
+  CARETAKER
+  ACCOUNTANT
+  TENANT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UnitStatus {
+  VACANT
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum TenantStatus {
+  PROSPECTIVE
+  ACTIVE
+  FORMER
+}
+
+enum InquiryStatus {
+  NEW
+  VIEWING_SCHEDULED
+  APPROVED
+  REJECTED
+  CLOSED
+}
+
+enum ViewingStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum LeaseStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum DepositStatus {
+  HELD
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FORFEITED
+}
+
+enum PaymentMethod {
+  MTN_MOBILE_MONEY
+  AIRTEL_MONEY
+  BANK_TRANSFER
+  CASH
+}
+
+enum PaymentType {
+  RENT
+  DEPOSIT
+  ADVANCE
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  AWAITING_APPROVAL
+  COMPLETED
+  CLOSED
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ReminderTriggerType {
+  DAYS_BEFORE_7
+  DAYS_BEFORE_3
+  DUE_TODAY
+  OVERDUE_3
+  OVERDUE_7
+  OVERDUE_14
+  OVERDUE_30
+}
+
+enum ReminderChannel {
+  SMS
+  WHATSAPP
+  EMAIL
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum InspectionType {
+  MOVE_IN
+  MOVE_OUT
+  ROUTINE
+}
+
+enum InspectionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum ResetChannel {
+  EMAIL
+  SMS
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODELS
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  fullName     String     @map("full_name")
+  email        String     @unique
+  phone        String     @unique
+  passwordHash String     @map("password_hash")
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  tenant               Tenant?              @relation("UserTenant")
+  viewingsConducted    Viewing[]            @relation("CaretakerViewings")
+  approvedTickets      MaintenanceTicket[]  @relation("TicketApprovedBy")
+  approvedExpenses     MaintenanceExpense[] @relation("ExpenseApprovedBy")
+  recordedPayments     Payment[]            @relation("PaymentRecordedBy")
+  processedRefunds     Refund[]             @relation("RefundProcessedBy")
+  inspectionsPerformed Inspection[]         @relation("InspectorUser")
+  auditLogs            AuditLog[]
+  invitesSent          Invite[]             @relation("InvitedBy")
+  passwordResetRequests PasswordResetRequest[]
+
+  @@map("users")
+}
+
+// Staff accounts (Landlord/Caretaker/Accountant) are invite-only — a Landlord
+// creates an Invite, the invitee sets their own password to activate it.
+// Tenant accounts do NOT use this flow; tenants self-register directly (see
+// the auth module in Milestone 3).
+model Invite {
+  id          String    @id @default(uuid())
+  email       String
+  phone       String
+  fullName    String    @map("full_name")
+  role        UserRole
+  tokenHash   String    @unique @map("token_hash")
+  invitedById String    @map("invited_by")
+  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([email])
+  @@map("invites")
+}
+
+// Backs both the email-link and SMS-OTP reset flows. `secretHash` holds a
+// bcrypt hash of either a long random token (email) or a 6-digit code (SMS) —
+// the reset endpoint doesn't need to know which, it just compares.
+model PasswordResetRequest {
+  id         String       @id @default(uuid())
+  userId     String       @map("user_id")
+  user       User         @relation(fields: [userId], references: [id])
+  channel    ResetChannel
+  secretHash String       @map("secret_hash")
+  expiresAt  DateTime     @map("expires_at")
+  usedAt     DateTime?    @map("used_at")
+  attempts   Int          @default(0)
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("password_reset_requests")
+}
+
+model Property {
+  id          String   @id @default(uuid())
+  name        String
+  address     String
+  gpsLat      Decimal? @map("gps_lat") @db.Decimal(9, 6)
+  gpsLng      Decimal? @map("gps_lng") @db.Decimal(9, 6)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  units Unit[]
+
+  @@map("properties")
+}
+
+model Unit {
+  id         String     @id @default(uuid())
+  propertyId String     @map("property_id")
+  property   Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unitNumber String     @map("unit_number")
+  bedrooms   Int
+  bathrooms  Int
+  sizeSqm    Decimal?   @map("size_sqm") @db.Decimal(8, 2)
+  rentAmount BigInt     @map("rent_amount")
+  status     UnitStatus @default(VACANT)
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  inquiries Inquiry[]
+  leases    Lease[]
+  tickets   MaintenanceTicket[]
+
+  @@unique([propertyId, unitNumber])
+  @@index([propertyId])
+  @@index([status])
+  @@map("units")
+}
+
+model Tenant {
+  id                    String       @id @default(uuid())
+  userId                String?      @unique @map("user_id")
+  user                  User?        @relation("UserTenant", fields: [userId], references: [id])
+  fullName              String       @map("full_name")
+  phone                 String
+  email                 String?
+  nationalId            String?      @map("national_id")
+  emergencyContactName  String?      @map("emergency_contact_name")
+  emergencyContactPhone String?      @map("emergency_contact_phone")
+  status                TenantStatus @default(PROSPECTIVE)
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+
+  documents TenantDocument[]
+  inquiries Inquiry[]
+  leases    Lease[]
+  tickets   MaintenanceTicket[]
+
+  @@map("tenants")
+}
+
+model TenantDocument {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  docType    String   @map("doc_type")
+  fileUrl    String   @map("file_url")
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  @@index([tenantId])
+  @@map("tenant_documents")
+}
+
+model Inquiry {
+  id        String        @id @default(uuid())
+  tenantId  String        @map("tenant_id")
+  tenant    Tenant        @relation(fields: [tenantId], references: [id])
+  unitId    String        @map("unit_id")
+  unit      Unit          @relation(fields: [unitId], references: [id])
+  message   String?
+  status    InquiryStatus @default(NEW)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  viewing Viewing?
+
+  @@index([unitId])
+  @@index([tenantId])
+  @@map("inquiries")
+}
+
+model Viewing {
+  id          String        @id @default(uuid())
+  inquiryId   String        @unique @map("inquiry_id")
+  inquiry     Inquiry       @relation(fields: [inquiryId], references: [id])
+  caretakerId String?       @map("caretaker_id")
+  caretaker   User?         @relation("CaretakerViewings", fields: [caretakerId], references: [id])
+  scheduledAt DateTime      @map("scheduled_at")
+  status      ViewingStatus @default(SCHEDULED)
+  notes       String?
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@index([caretakerId])
+  @@map("viewings")
+}
+
+model Lease {
+  id                String      @id @default(uuid())
+  tenantId          String      @map("tenant_id")
+  tenant            Tenant      @relation(fields: [tenantId], references: [id])
+  unitId            String      @map("unit_id")
+  unit              Unit        @relation(fields: [unitId], references: [id])
+  startDate         DateTime    @map("start_date") @db.Date
+  endDate           DateTime    @map("end_date") @db.Date
+  rentAmount        BigInt      @map("rent_amount")
+  depositAmount     BigInt      @map("deposit_amount")
+  billingDay        Int         @map("billing_day") // 1-28, day of month rent is due
+  status            LeaseStatus @default(PENDING)
+  signedDocumentUrl String?     @map("signed_document_url")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  deposit     Deposit?
+  payments    Payment[]
+  reminders   Reminder[]
+  inspections Inspection[]
+
+  @@index([unitId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("leases")
+}
+
+model Deposit {
+  id                  String        @id @default(uuid())
+  leaseId             String        @unique @map("lease_id")
+  lease               Lease         @relation(fields: [leaseId], references: [id])
+  amountCollected     BigInt        @map("amount_collected")
+  amountRefunded      BigInt        @default(0) @map("amount_refunded")
+  status              DepositStatus @default(HELD)
+  reconciliationNotes String?       @map("reconciliation_notes")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  @@map("deposits")
+}
+
+model Payment {
+  id               String        @id @default(uuid())
+  leaseId          String        @map("lease_id")
+  lease            Lease         @relation(fields: [leaseId], references: [id])
+  amount           BigInt
+  method           PaymentMethod
+  referenceNumber  String?       @map("reference_number")
+  receiptUploadUrl String?       @map("receipt_upload_url")
+  paymentType      PaymentType   @default(RENT) @map("payment_type")
+  paidForPeriod    DateTime?     @map("paid_for_period") @db.Date
+  status           PaymentStatus @default(CONFIRMED)
+  recordedById     String?       @map("recorded_by")
+  recordedBy       User?         @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  receipt Receipt?
+  refunds Refund[]
+
+  @@index([leaseId])
+  @@index([createdAt])
+  @@index([status])
+  @@map("payments")
+}
+
+model Refund {
+  id            String   @id @default(uuid())
+  paymentId     String   @map("payment_id")
+  payment       Payment  @relation(fields: [paymentId], references: [id])
+  amount        BigInt
+  reason        String
+  processedById String?  @map("processed_by")
+  processedBy   User?    @relation("RefundProcessedBy", fields: [processedById], references: [id])
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+model Receipt {
+  id            String   @id @default(uuid())
+  paymentId     String   @unique @map("payment_id")
+  payment       Payment  @relation(fields: [paymentId], references: [id])
+  receiptNumber String   @unique @map("receipt_number")
+  pdfUrl        String?  @map("pdf_url")
+  issuedAt      DateTime @default(now()) @map("issued_at")
+
+  @@map("receipts")
+}
+
+model MaintenanceTicket {
+  id           String              @id @default(uuid())
+  unitId       String              @map("unit_id")
+  unit         Unit                @relation(fields: [unitId], references: [id])
+  tenantId     String?             @map("tenant_id")
+  tenant       Tenant?             @relation(fields: [tenantId], references: [id])
+  title        String
+  description  String
+  priority     MaintenancePriority @default(MEDIUM)
+  status       MaintenanceStatus   @default(OPEN)
+  approvedById String?             @map("approved_by")
+  approvedBy   User?               @relation("TicketApprovedBy", fields: [approvedById], references: [id])
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  expenses MaintenanceExpense[]
+
+  @@index([unitId])
+  @@index([status])
+  @@map("maintenance_tickets")
+}
+
+model MaintenanceExpense {
+  id           String        @id @default(uuid())
+  ticketId     String        @map("ticket_id")
+  ticket       MaintenanceTicket @relation(fields: [ticketId], references: [id])
+  amount       BigInt
+  description  String?
+  status       ExpenseStatus @default(PENDING)
+  approvedById String?       @map("approved_by")
+  approvedBy   User?         @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?     @map("approved_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  @@index([ticketId])
+  @@map("maintenance_expenses")
+}
+
+model ReminderTemplate {
+  id          String              @id @default(uuid())
+  name        String
+  channel     ReminderChannel
+  triggerType ReminderTriggerType @map("trigger_type")
+  messageBody String              @map("message_body")
+  isActive    Boolean             @default(true) @map("is_active")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  reminders Reminder[]
+
+  @@map("reminder_templates")
+}
+
+model Reminder {
+  id            String              @id @default(uuid())
+  leaseId       String              @map("lease_id")
+  lease         Lease               @relation(fields: [leaseId], references: [id])
+  templateId    String?             @map("template_id")
+  template      ReminderTemplate?   @relation(fields: [templateId], references: [id])
+  triggerType   ReminderTriggerType @map("trigger_type")
+  channel       ReminderChannel
+  billingPeriod DateTime            @map("billing_period") @db.Date // which month's due date this reminder is for
+  status        ReminderStatus      @default(PENDING)
+  sentAt        DateTime?           @map("sent_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  @@unique([leaseId, triggerType, channel, billingPeriod], name: "reminder_dedupe")
+  @@index([leaseId])
+  @@index([status])
+  @@map("reminders")
+}
+
+model Inspection {
+  id             String            @id @default(uuid())
+  leaseId        String            @map("lease_id")
+  lease          Lease             @relation(fields: [leaseId], references: [id])
+  type           InspectionType
+  inspectorId    String?           @map("inspector_id")
+  inspector      User?             @relation("InspectorUser", fields: [inspectorId], references: [id])
+  scheduledAt    DateTime?         @map("scheduled_at")
+  completedAt    DateTime?         @map("completed_at")
+  conditionNotes String?           @map("condition_notes")
+  status         InspectionStatus  @default(SCHEDULED)
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  @@index([leaseId])
+  @@map("inspections")
+}
+
+// Polymorphic photo attachment. Prisma has no native polymorphic relation,
+// so entityType/entityId are plain columns validated at the application layer
+// (and via a CHECK constraint added in migration 0002) rather than a typed FK.
+model Photo {
+  id         String   @id @default(uuid())
+  entityType String   @map("entity_type") // 'property' | 'unit' | 'maintenance_ticket' | 'inspection'
+  entityId   String   @map("entity_id")
+  url        String
+  caption    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("photos")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
