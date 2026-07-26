@@ -5,7 +5,7 @@ import { handleApiError } from '@/lib/api-errors';
 import { recordPaymentSchema } from '@/lib/validators/payment';
 import { listPayments, recordPayment } from '@/server/services/payments';
 
-const STAFF_WHO_RECORD_PAYMENTS = ['LANDLORD', 'CARETAKER', 'ACCOUNTANT'];
+const STAFF_WHO_RECORD_PAYMENTS = ['LANDLORD', 'CARETAKER', 'ACCOUNTANT'] as const;
 
 export async function GET() {
   try {
