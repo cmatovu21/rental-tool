@@ -9,7 +9,7 @@ const STAFF_WHO_RECORD_PAYMENTS = ['LANDLORD', 'CARETAKER', 'ACCOUNTANT'] as con
 
 export async function GET() {
   try {
-    requireRole(await getCurrentUser(), STAFF_WHO_RECORD_PAYMENTS);
+    requireRole(await getCurrentUser(), [...STAFF_WHO_RECORD_PAYMENTS]);
     const payments = await listPayments();
     return NextResponse.json({ payments });
   } catch (err) {
