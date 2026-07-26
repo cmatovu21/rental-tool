@@ -34,7 +34,7 @@ export async function GET(request: Request, { params }: { params: { type: string
     }
     if (format === 'pdf') {
       const buffer = await toPdf(report);
-      return new NextResponse(buffer, {
+      return new NextResponse(new Uint8Array(buffer), {
         headers: {
           'Content-Type': 'application/pdf',
           'Content-Disposition': `attachment; filename="${filenameBase}.pdf"`,
