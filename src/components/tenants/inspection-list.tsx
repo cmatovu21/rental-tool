@@ -10,7 +10,7 @@ interface Inspection {
   type: string;
   status: string;
   conditionNotes: string | null;
-  createdAt: string;
+  createdAt: Date;
 }
 
 export function InspectionList({ leaseId, inspections }: { leaseId: string | null; inspections: Inspection[] }) {

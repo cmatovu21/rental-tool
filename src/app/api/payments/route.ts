@@ -5,11 +5,11 @@ import { handleApiError } from '@/lib/api-errors';
 import { recordPaymentSchema } from '@/lib/validators/payment';
 import { listPayments, recordPayment } from '@/server/services/payments';
 
-const STAFF_WHO_RECORD_PAYMENTS = ['LANDLORD', 'CARETAKER', 'ACCOUNTANT'];
+const STAFF_WHO_RECORD_PAYMENTS = ['LANDLORD', 'CARETAKER', 'ACCOUNTANT'] as const;
 
 export async function GET() {
   try {
-    requireRole(await getCurrentUser(), STAFF_WHO_RECORD_PAYMENTS);
+    requireRole(await getCurrentUser(), [...STAFF_WHO_RECORD_PAYMENTS]);
     const payments = await listPayments();
     return NextResponse.json({ payments });
   } catch (err) {
@@ -19,7 +19,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const session = requireRole(await getCurrentUser(), STAFF_WHO_RECORD_PAYMENTS);
+    const session = requireRole(await getCurrentUser(), [...STAFF_WHO_RECORD_PAYMENTS]);
     const body = await request.json().catch(() => null);
     const parsed = recordPaymentSchema.safeParse(body);
     if (!parsed.success) {

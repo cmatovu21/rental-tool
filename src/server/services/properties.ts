@@ -33,3 +33,4 @@ export async function deleteProperty(propertyId: string) {
   // intentional: never silently cascade-delete financial/lease history.
   await prisma.property.delete({ where: { id: propertyId } });
 }
+export { listProperties, getPropertyDetail } from './units';

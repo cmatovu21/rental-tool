@@ -7,7 +7,7 @@ interface TenantDocument {
   id: string;
   docType: string;
   fileUrl: string;
-  uploadedAt: string;
+  uploadedAt: Date;
 }
 
 const DOC_TYPES = ['national_id', 'signed_lease', 'passport_photo', 'other'];
