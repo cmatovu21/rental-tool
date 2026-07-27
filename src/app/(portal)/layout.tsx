@@ -14,6 +14,7 @@ export default async function PortalLayout({ children }: { children: React.React
   const navLinks = [
     { href: '/portal', label: 'Dashboard' },
     { href: '/portal/maintenance', label: 'Maintenance' },
+    { href: '/portal/profile', label: 'My Profile' },
   ];
 
   return (
@@ -34,7 +35,9 @@ export default async function PortalLayout({ children }: { children: React.React
                 </Link>
               ))}
             </nav>
-            <span className="hidden md:inline text-sm text-ink/70 dark:text-paper/70">{session.fullName}</span>
+            <Link href="/portal/profile" className="hidden md:inline text-sm text-ink/70 dark:text-paper/70 hover:text-ink dark:hover:text-paper hover:underline">
+              {session.fullName}
+            </Link>
             <ThemeToggle />
             <LogoutButton />
             <MobileNav links={navLinks} />

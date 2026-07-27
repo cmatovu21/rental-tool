@@ -22,6 +22,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/maintenance', label: 'Maintenance' },
     ...(session.role === 'LANDLORD' || session.role === 'ACCOUNTANT' ? [{ href: '/reports', label: 'Reports' }] : []),
     ...(session.role === 'LANDLORD' ? [{ href: '/settings/users', label: 'Staff & Access' }] : []),
+    { href: '/profile', label: 'My Profile' },
   ];
 
   return (
@@ -45,7 +46,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <span className="hidden sm:inline text-xs font-mono uppercase tracking-wide text-forest bg-forest-50 dark:bg-white/10 px-2 py-1 rounded">
               {session.role}
             </span>
-            <span className="hidden md:inline text-sm text-ink/70 dark:text-paper/70">{session.fullName}</span>
+            <Link href="/profile" className="hidden md:inline text-sm text-ink/70 dark:text-paper/70 hover:text-ink dark:hover:text-paper hover:underline">
+              {session.fullName}
+            </Link>
             <ThemeToggle />
             <LogoutButton />
             <MobileNav links={navLinks} />
