@@ -14,6 +14,13 @@ const TRIGGER_OFFSETS: Record<string, number> = {
   OVERDUE_30: 30,
 };
 
+const OVERDUE_LABELS: Record<string, string> = {
+  OVERDUE_3: '3 days overdue',
+  OVERDUE_7: '7 days overdue',
+  OVERDUE_14: '14 days overdue',
+  OVERDUE_30: '30 days overdue',
+};
+
 function sameCalendarDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -50,6 +57,8 @@ export async function runReminderCheck(): Promise<{ checked: number; sent: numbe
 
   const templates = await prisma.reminderTemplate.findMany({ where: { isActive: true } });
   let sentCount = 0;
+  const overdueAlerts: { tenantName: string; unitLabel: string; triggerType: string; amount: string }[] = [];
+  const seenOverdueThisRun = new Set<string>();
 
   for (const lease of activeLeases) {
     const nearbyDueDates = [-1, 0, 1].map(
@@ -63,6 +72,19 @@ export async function runReminderCheck(): Promise<{ checked: number; sent: numbe
         const targetDate = new Date(dueDate);
         targetDate.setDate(targetDate.getDate() + offsetDays);
         if (!sameCalendarDay(targetDate, today)) continue;
+
+        if (triggerType in OVERDUE_LABELS) {
+          const dedupeKey = `${lease.id}-${triggerType}`;
+          if (!seenOverdueThisRun.has(dedupeKey)) {
+            seenOverdueThisRun.add(dedupeKey);
+            overdueAlerts.push({
+              tenantName: lease.tenant.fullName,
+              unitLabel: `${lease.unit.property.name} · ${lease.unit.unitNumber}`,
+              triggerType,
+              amount: formatUgx(toDisplayNumber(lease.rentAmount)),
+            });
+          }
+        }
 
         const matchingTemplates = templates.filter((t) => t.triggerType === triggerType);
         for (const template of matchingTemplates) {
@@ -108,7 +130,39 @@ export async function runReminderCheck(): Promise<{ checked: number; sent: numbe
     }
   }
 
+  if (overdueAlerts.length > 0) {
+    await sendLandlordOverdueAlert(overdueAlerts);
+  }
+
   return { checked: activeLeases.length, sent: sentCount };
+}
+
+/**
+ * One email per run (not one per tenant) — a landlord managing several
+ * properties wants a single "here's who's behind" digest, not a flood of
+ * separate emails every time the daily check finds more than one overdue
+ * tenant.
+ */
+async function sendLandlordOverdueAlert(
+  alerts: { tenantName: string; unitLabel: string; triggerType: string; amount: string }[]
+) {
+  const landlords = await prisma.user.findMany({ where: { role: 'LANDLORD', status: 'ACTIVE' }, select: { email: true } });
+  if (landlords.length === 0) return;
+
+  const lines = alerts.map(
+    (a) => `- ${a.tenantName} (${a.unitLabel}): ${OVERDUE_LABELS[a.triggerType]}, ${a.amount} due`
+  );
+  const body = [
+    `${alerts.length} tenant${alerts.length === 1 ? ' is' : 's are'} now overdue on rent:`,
+    '',
+    ...lines,
+    '',
+    'Log in to RentLedger to see full details or record a payment.',
+  ].join('\n');
+
+  for (const landlord of landlords) {
+    await sendEmail({ to: landlord.email, subject: `RentLedger: ${alerts.length} tenant${alerts.length === 1 ? '' : 's'} overdue on rent`, body });
+  }
 }
 
 export async function listReminderLog(limit = 50) {
